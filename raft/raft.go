@@ -2,6 +2,7 @@ package raft
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/justin0u0/raft/pb"
@@ -61,10 +62,14 @@ func NewRaft(id uint32, peers map[uint32]Peer, persister Persister, config *Conf
 func (r *Raft) applyCommand(req *pb.ApplyCommandRequest) (*pb.ApplyCommandResponse, error) {
 	// TODO: (B.1)* - if not leader, reject client operation and returns `errNotLeader`
 
+	// return &pb.ApplyCommandResponse{Entry: nil}, errNotLeader
+
 	// TODO: (B.1)* - create a new log entry, append to the local entries
 	// Hint:
 	// - use `getLastLog` to get the last log ID
 	// - use `appendLogs` to append new log
+	// lastLogId, lastLogTerm := r.getLastLog()
+	// r.appendLogs()
 
 	// TODO: (B.1)* - return the new log entry
 	return nil, nil
@@ -72,37 +77,49 @@ func (r *Raft) applyCommand(req *pb.ApplyCommandRequest) (*pb.ApplyCommandRespon
 
 func (r *Raft) appendEntries(req *pb.AppendEntriesRequest) (*pb.AppendEntriesResponse, error) {
 	// TODO: (A.1) - reply false if term < currentTerm
-	// Log: r.logger.Info("reject append entries since current term is older")
-
+	if req.GetTerm() < r.currentTerm {
+		// Log: r.logger.Info("reject append entries since current term is older")
+		return &pb.AppendEntriesResponse{Term: r.currentTerm, Success: false}, nil
+	}
 	// TODO: (A.2)* - reset the `lastHeartbeat`
 	// Description: start from the current line, the current request is a valid RPC
-
+	r.lastHeartbeat = time.Now()
 	// TODO: (A.3) - if RPC request or response contains term T > currentTerm: set currentTerm = T, convert to follower
 	// Hint: use `toFollower` to convert to follower
 	// Log: r.logger.Info("increase term since receive a newer one", zap.Uint64("term", r.currentTerm))
-
+	if req.GetTerm() > r.currentTerm {
+		r.toFollower(req.GetTerm())
+	}
 	// TODO: (A.4) - if AppendEntries RPC received from new leader: convert to follower
 	// Log: r.logger.Info("receive request from leader, fallback to follower", zap.Uint64("term", r.currentTerm))
+	// if req.GetLeaderId() != r.
+	// r.
+	// prevLogId := req.GetPrevLogId()
+	// prevLogTerm := req.GetPrevLogTerm()
+	// if prevLogId != 0 && prevLogTerm != 0 {
+	// TODO: (B.2) - reply false if log doesn’t contain an entry at prevLogIndex whose term matches prevLogTerm
+	// Hint: use `getLog` to get log with ID equals to prevLogId
+	// Log: r.logger.Info("the given previous log from leader is missing or mismatched", zap.Uint64("prevLogId", prevLogId), zap.Uint64("prevLogTerm", prevLogTerm), zap.Uint64("logTerm", log.GetTerm()))
+	// if r.getLog(prevLogId) == nil {
+	// 	return &pb.AppendEntriesResponse{Term: r.currentTerm, Success: false}, nil
+	// }
+	// }
 
-	prevLogId := req.GetPrevLogId()
-	prevLogTerm := req.GetPrevLogTerm()
-	if prevLogId != 0 && prevLogTerm != 0 {
-		// TODO: (B.2) - reply false if log doesn’t contain an entry at prevLogIndex whose term matches prevLogTerm
-		// Hint: use `getLog` to get log with ID equals to prevLogId
-		// Log: r.logger.Info("the given previous log from leader is missing or mismatched", zap.Uint64("prevLogId", prevLogId), zap.Uint64("prevLogTerm", prevLogTerm), zap.Uint64("logTerm", log.GetTerm()))
-	}
-
-	if len(req.GetEntries()) != 0 {
-		// TODO: (B.3) - if an existing entry conflicts with a new one (same index but different terms), delete the existing entry and all that follow it
-		// TODO: (B.4) - append any new entries not already in the log
-		// Hint: use `deleteLogs` follows by `appendLogs`
-		// Log: r.logger.Info("receive and append new entries", zap.Int("newEntries", len(req.GetEntries())), zap.Int("numberOfEntries", len(r.logs)))
-	}
+	// if len(req.GetEntries()) != 0 {
+	// TODO: (B.3) - if an existing entry conflicts with a new one (same index but different terms), delete the existing entry and all that follow it
+	// TODO: (B.4) - append any new entries not already in the log
+	// Hint: use `deleteLogs` follows by `appendLogs`
+	// Log: r.logger.Info("receive and append new entries", zap.Int("newEntries", len(req.GetEntries())), zap.Int("numberOfEntries", len(r.logs)))
+	// }
 
 	// TODO: (B.5) - if leaderCommit > commitIndex, set commitIndex = min(leaderCommit, index of last new entry)
 	// Hint: use `getLastLog` to get the index of last new entry
 	// Hint: use `applyLogs` to apply(commit) new logs in background
 	// Log: r.logger.Info("update commit index from leader", zap.Uint64("commitIndex", r.commitIndex))
+	// if req.GetLeaderCommitId() > r.commitIndex {
+	// r.commitIndex = uint64(math.Min(float64(req.GetLeaderCommitId()), float64(r.commitIndex)))
+	// r.applyLogs(req.Entries)
+	// }
 
 	return &pb.AppendEntriesResponse{Term: r.currentTerm, Success: true}, nil
 }
@@ -110,12 +127,17 @@ func (r *Raft) appendEntries(req *pb.AppendEntriesRequest) (*pb.AppendEntriesRes
 func (r *Raft) requestVote(req *pb.RequestVoteRequest) (*pb.RequestVoteResponse, error) {
 	// TODO: (A.5) - reply false if term < currentTerm
 	// Log: r.logger.Info("reject request vote since current term is older")
-
+	if req.GetTerm() < r.currentTerm {
+		return &pb.RequestVoteResponse{Term: r.currentTerm, VoteGranted: false}, nil
+	}
 	// TODO: (A.6) - if RPC request or response contains term T > currentTerm: set currentTerm = T, convert to follower
 	// Hint: use `toFollower` to convert to follower
 	// Log: r.logger.Info("increase term since receive a newer one", zap.Uint64("term", r.currentTerm))
+	if req.GetTerm() > r.currentTerm {
+		r.toFollower(req.GetTerm())
+	}
 
-	if false {
+	if (r.votedFor != 0) || (r.votedFor != req.GetCandidateId()) {
 		// TODO: (A.7) - if votedFor is null or candidateId, and candidate’s log is at least as up-to-date as receiver’s log, grant vote
 		// Hint: (fix the condition) if already vote for another candidate, reply false
 
@@ -126,7 +148,8 @@ func (r *Raft) requestVote(req *pb.RequestVoteRequest) (*pb.RequestVoteResponse,
 		return &pb.RequestVoteResponse{Term: r.currentTerm, VoteGranted: false}, nil
 	}
 
-	if false {
+	lastLogId, lastLogTerm := r.getLastLog()
+	if (req.GetLastLogTerm() < lastLogTerm) || (req.GetLastLogId() < lastLogId) {
 		// TODO: (A.7) - if votedFor is null or candidateId, and candidate’s log is at least as up-to-date as receiver’s log, grant vote
 		// Hint: (fix the condition) if the local last entry is more up-to-date than the candidate's last entry, reply false
 		// Hint: use `getLastLog` to get the last log entry
@@ -142,6 +165,7 @@ func (r *Raft) requestVote(req *pb.RequestVoteRequest) (*pb.RequestVoteResponse,
 
 	// TODO: (A.8)* - reset the `lastHeartbeat`
 	// Description: start from the current line, the current request is a valid RPC
+	r.lastHeartbeat = time.Now()
 
 	return &pb.RequestVoteResponse{Term: r.currentTerm, VoteGranted: true}, nil
 }
@@ -210,6 +234,7 @@ func (r *Raft) runFollower(ctx context.Context) {
 func (r *Raft) handleFollowerHeartbeatTimeout() {
 	// TODO: (A.9) - if election timeout elapses without receiving AppendEntries RPC from current leader or granting vote to candidate: convert to candidate
 	// Hint: use `toCandidate` to convert to candidate
+	r.toCandidate()
 
 	r.logger.Info("heartbeat timeout, change state from follower to candidate")
 }
@@ -263,37 +288,48 @@ func (r *Raft) voteForSelf(grantedVotes *int) {
 	// TODO: (A.10) increment currentTerm
 	// TODO: (A.10) vote for self
 	// Hint: use `voteFor` to vote for self
-
+	r.voteFor(r.id, true)
 	r.logger.Info("vote for self", zap.Uint64("term", r.currentTerm))
 }
 
 func (r *Raft) broadcastRequestVote(ctx context.Context, voteCh chan *voteResult) {
 	r.logger.Info("broadcast request vote", zap.Uint64("term", r.currentTerm))
 
+	lastLogId, lastLogTerm := r.getLastLog()
 	req := &pb.RequestVoteRequest{
 		// TODO: (A.11) - send RequestVote RPCs to all other servers (set all fields of `req`)
 		// Hint: use `getLastLog` to get the last log entry
-	}
+		Term:        r.currentTerm,
+		CandidateId: r.id,
+		LastLogId:   lastLogId,
+		LastLogTerm: lastLogTerm}
 
 	// TODO: (A.11) - send RequestVote RPCs to all other servers (modify the code to send `RequestVote` RPCs in parallel)
+	var wg sync.WaitGroup
 	for peerId, peer := range r.peers {
-		peerId := peerId
-		peer := peer
+		wg.Add(1)
+		go func(wg *sync.WaitGroup, peerId uint32, peer Peer) {
+			defer wg.Done()
 
-		resp, err := peer.RequestVote(ctx, req)
-		if err != nil {
-			r.logger.Error("fail to send RequestVote RPC", zap.Error(err), zap.Uint32("peer", peerId))
-			return
-		}
+			resp, err := peer.RequestVote(ctx, req)
+			if err != nil {
+				r.logger.Error("fail to send RequestVote RPC", zap.Error(err), zap.Uint32("peer", peerId))
+				return
+			}
 
-		voteCh <- &voteResult{RequestVoteResponse: resp, peerId: peerId}
+			voteCh <- &voteResult{RequestVoteResponse: resp, peerId: peerId}
+		}(&wg, peerId, peer)
 	}
+	wg.Wait()
 }
 
 func (r *Raft) handleVoteResult(vote *voteResult, grantedVotes *int, votesNeeded int) {
 	// TODO: (A.12) - if RPC request or response contains term T > currentTerm: set currentTerm = T, convert to follower
 	// Hint: use `toFollower` to convert to follower
 	// Log: r.logger.Info("receive new term on RequestVote response, fallback to follower", zap.Uint32("peer", vote.peerId))
+	if vote.Term > r.currentTerm {
+		r.toFollower(vote.Term)
+	}
 
 	if vote.VoteGranted {
 		(*grantedVotes)++
@@ -303,6 +339,9 @@ func (r *Raft) handleVoteResult(vote *voteResult, grantedVotes *int, votesNeeded
 	// TODO: (A.13) - if votes received from majority of servers: become leader
 	// Log: r.logger.Info("election won", zap.Int("grantedVote", (*grantedVotes)), zap.Uint64("term", r.currentTerm))
 	// Hint: use `toLeader` to convert to leader
+	if *grantedVotes > votesNeeded {
+		r.toLeader()
+	}
 }
 
 // leader related
@@ -346,6 +385,7 @@ func (r *Raft) runLeader(ctx context.Context) {
 
 func (r *Raft) broadcastAppendEntries(ctx context.Context, appendEntriesResultCh chan *appendEntriesResult) {
 	r.logger.Info("broadcast append entries")
+	var wg sync.WaitGroup
 
 	for peerId, peer := range r.peers {
 		peerId := peerId
@@ -357,29 +397,46 @@ func (r *Raft) broadcastAppendEntries(ctx context.Context, appendEntriesResultCh
 		// Hint: set `req` with the correct fields (entries, prevLogId and prevLogTerm MUST be set)
 		// Hint: use `getLog` to get specific log, `getLogs` to get all logs after and include the specific log Id
 		// Log: r.logger.Debug("send append entries", zap.Uint32("peer", peerId), zap.Any("request", req), zap.Int("entries", len(entries)))
-		req := &pb.AppendEntriesRequest{}
+		// entries := r.getLogs(r.nextIndex[r.id])
+		// matchlog := r.getLog(r.matchIndex[r.id])
+		req := &pb.AppendEntriesRequest{
+			Term:           r.currentTerm,
+			LeaderId:       r.id,
+			LeaderCommitId: r.commitIndex}
+		// ,
+		// PrevLogId:      matchlog.Id,
+		// PrevLogTerm:    matchlog.Term,
+		// Entries:        entries}
 
 		// TODO: (A.14) & (B.6)
 		// Hint: modify the code to send `AppendEntries` RPCs in parallel
-		resp, err := peer.AppendEntries(ctx, req)
-		if err != nil {
-			r.logger.Error("fail to send AppendEntries RPC", zap.Error(err), zap.Uint32("peer", peerId))
-			// connection issue, should not be handled
-			return
-		}
+		wg.Add(1)
+		go func(wg *sync.WaitGroup, peerId uint32, peer Peer) {
+			defer wg.Done()
+			resp, err := peer.AppendEntries(ctx, req)
+			if err != nil {
+				r.logger.Error("fail to send AppendEntries RPC", zap.Error(err), zap.Uint32("peer", peerId))
+				// connection issue, should not be handled
+				return
+			}
 
-		appendEntriesResultCh <- &appendEntriesResult{
-			AppendEntriesResponse: resp,
-			req:                   req,
-			peerId:                peerId,
-		}
+			appendEntriesResultCh <- &appendEntriesResult{
+				AppendEntriesResponse: resp,
+				req:                   req,
+				peerId:                peerId,
+			}
+		}(&wg, peerId, peer)
 	}
+	wg.Wait()
 }
 
 func (r *Raft) handleAppendEntriesResult(result *appendEntriesResult) {
 	// TODO: (A.15) - if RPC request or response contains term T > currentTerm: set currentTerm = T, convert to follower
 	// Hint: use `toFollower` to convert to follower
 	// Log: r.logger.Info("receive new term on AppendEntries response, fallback to follower", zap.Uint32("peer", result.peerId))
+	if result.Term > r.currentTerm {
+		r.toFollower(result.Term)
+	}
 
 	entries := result.req.GetEntries()
 

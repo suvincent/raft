@@ -31,6 +31,31 @@ If you encounter any problem, please feel free to contact me.
 
 # Implementation
 
+- [x] Todo A.1
+- [x] Todo A.2
+- [x] Todo A.3
+- [ ] Todo A.4
+- [x] Todo A.5
+- [x] Todo A.6
+- [x] Todo A.7
+- [x] Todo A.8
+- [x] Todo A.9
+- [x] Todo A.10
+- [x] Todo A.11
+- [x] Todo A.12
+- [x] Todo A.13
+- [x] Todo A.14
+- [x] Todo A.15
+- [ ] Todo B.1
+- [ ] Todo B.2
+- [ ] Todo B.3
+- [ ] Todo B.4
+- [ ] Todo B.5
+- [ ] Todo B.6
+- [ ] Todo B.7
+- [ ] Todo B.8
+- [ ] Todo B.9
+
 ## Description
 
 Before you start the implementation, let’s go through the project layout, structure and design.
