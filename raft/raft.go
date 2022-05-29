@@ -2,7 +2,6 @@ package raft
 
 import (
 	"context"
-	"sync"
 	"time"
 
 	"github.com/justin0u0/raft/pb"
@@ -78,7 +77,7 @@ func (r *Raft) applyCommand(req *pb.ApplyCommandRequest) (*pb.ApplyCommandRespon
 func (r *Raft) appendEntries(req *pb.AppendEntriesRequest) (*pb.AppendEntriesResponse, error) {
 	// TODO: (A.1) - reply false if term < currentTerm
 	if req.GetTerm() < r.currentTerm {
-		// Log: r.logger.Info("reject append entries since current term is older")
+		r.logger.Info("reject append entries since current term is older")
 		return &pb.AppendEntriesResponse{Term: r.currentTerm, Success: false}, nil
 	}
 	// TODO: (A.2)* - reset the `lastHeartbeat`
@@ -86,7 +85,7 @@ func (r *Raft) appendEntries(req *pb.AppendEntriesRequest) (*pb.AppendEntriesRes
 	r.lastHeartbeat = time.Now()
 	// TODO: (A.3) - if RPC request or response contains term T > currentTerm: set currentTerm = T, convert to follower
 	// Hint: use `toFollower` to convert to follower
-	// Log: r.logger.Info("increase term since receive a newer one", zap.Uint64("term", r.currentTerm))
+	r.logger.Info("increase term since receive a newer one", zap.Uint64("term", r.currentTerm))
 	if req.GetTerm() > r.currentTerm {
 		r.toFollower(req.GetTerm())
 	}
@@ -126,18 +125,20 @@ func (r *Raft) appendEntries(req *pb.AppendEntriesRequest) (*pb.AppendEntriesRes
 
 func (r *Raft) requestVote(req *pb.RequestVoteRequest) (*pb.RequestVoteResponse, error) {
 	// TODO: (A.5) - reply false if term < currentTerm
-	// Log: r.logger.Info("reject request vote since current term is older")
+	r.logger.Info("reject request vote since current term is older")
 	if req.GetTerm() < r.currentTerm {
 		return &pb.RequestVoteResponse{Term: r.currentTerm, VoteGranted: false}, nil
 	}
 	// TODO: (A.6) - if RPC request or response contains term T > currentTerm: set currentTerm = T, convert to follower
 	// Hint: use `toFollower` to convert to follower
-	// Log: r.logger.Info("increase term since receive a newer one", zap.Uint64("term", r.currentTerm))
+	r.logger.Info("increase term since receive a newer one", zap.Uint64("term", r.currentTerm))
 	if req.GetTerm() > r.currentTerm {
 		r.toFollower(req.GetTerm())
+		r.voteFor(0, false)
 	}
 
-	if (r.votedFor != 0) || (r.votedFor != req.GetCandidateId()) {
+	if r.votedFor != 0 {
+		// if (r.votedFor != 0) || (r.votedFor = req.GetCandidateId()) {
 		// TODO: (A.7) - if votedFor is null or candidateId, and candidate’s log is at least as up-to-date as receiver’s log, grant vote
 		// Hint: (fix the condition) if already vote for another candidate, reply false
 
@@ -289,6 +290,7 @@ func (r *Raft) voteForSelf(grantedVotes *int) {
 	// TODO: (A.10) vote for self
 	// Hint: use `voteFor` to vote for self
 	r.voteFor(r.id, true)
+	(*grantedVotes)++
 	r.logger.Info("vote for self", zap.Uint64("term", r.currentTerm))
 }
 
@@ -305,41 +307,37 @@ func (r *Raft) broadcastRequestVote(ctx context.Context, voteCh chan *voteResult
 		LastLogTerm: lastLogTerm}
 
 	// TODO: (A.11) - send RequestVote RPCs to all other servers (modify the code to send `RequestVote` RPCs in parallel)
-	var wg sync.WaitGroup
 	for peerId, peer := range r.peers {
-		wg.Add(1)
-		go func(wg *sync.WaitGroup, peerId uint32, peer Peer) {
-			defer wg.Done()
+		go func(peerId uint32, peer Peer) {
 
 			resp, err := peer.RequestVote(ctx, req)
 			if err != nil {
 				r.logger.Error("fail to send RequestVote RPC", zap.Error(err), zap.Uint32("peer", peerId))
 				return
 			}
-
+			r.logger.Info("peer vote result:", zap.Uint32("voter", peerId), zap.Bool("Granted?", resp.VoteGranted))
 			voteCh <- &voteResult{RequestVoteResponse: resp, peerId: peerId}
-		}(&wg, peerId, peer)
+		}(peerId, peer)
 	}
-	wg.Wait()
 }
 
 func (r *Raft) handleVoteResult(vote *voteResult, grantedVotes *int, votesNeeded int) {
 	// TODO: (A.12) - if RPC request or response contains term T > currentTerm: set currentTerm = T, convert to follower
 	// Hint: use `toFollower` to convert to follower
-	// Log: r.logger.Info("receive new term on RequestVote response, fallback to follower", zap.Uint32("peer", vote.peerId))
+	r.logger.Info("receive new term on RequestVote response, fallback to follower", zap.Uint32("peer", vote.peerId))
 	if vote.Term > r.currentTerm {
 		r.toFollower(vote.Term)
 	}
 
+	r.logger.Info("vote granted", zap.Uint32("peer", vote.peerId), zap.Int("grantedVote", (*grantedVotes)))
 	if vote.VoteGranted {
 		(*grantedVotes)++
-		r.logger.Info("vote granted", zap.Uint32("peer", vote.peerId), zap.Int("grantedVote", (*grantedVotes)))
 	}
 
 	// TODO: (A.13) - if votes received from majority of servers: become leader
-	// Log: r.logger.Info("election won", zap.Int("grantedVote", (*grantedVotes)), zap.Uint64("term", r.currentTerm))
 	// Hint: use `toLeader` to convert to leader
 	if *grantedVotes > votesNeeded {
+		r.logger.Info("election won", zap.Int("grantedVote", (*grantedVotes)), zap.Uint64("term", r.currentTerm))
 		r.toLeader()
 	}
 }
@@ -385,7 +383,6 @@ func (r *Raft) runLeader(ctx context.Context) {
 
 func (r *Raft) broadcastAppendEntries(ctx context.Context, appendEntriesResultCh chan *appendEntriesResult) {
 	r.logger.Info("broadcast append entries")
-	var wg sync.WaitGroup
 
 	for peerId, peer := range r.peers {
 		peerId := peerId
@@ -410,9 +407,8 @@ func (r *Raft) broadcastAppendEntries(ctx context.Context, appendEntriesResultCh
 
 		// TODO: (A.14) & (B.6)
 		// Hint: modify the code to send `AppendEntries` RPCs in parallel
-		wg.Add(1)
-		go func(wg *sync.WaitGroup, peerId uint32, peer Peer) {
-			defer wg.Done()
+		// wg.Add(1)
+		go func(peerId uint32, peer Peer) {
 			resp, err := peer.AppendEntries(ctx, req)
 			if err != nil {
 				r.logger.Error("fail to send AppendEntries RPC", zap.Error(err), zap.Uint32("peer", peerId))
@@ -425,15 +421,14 @@ func (r *Raft) broadcastAppendEntries(ctx context.Context, appendEntriesResultCh
 				req:                   req,
 				peerId:                peerId,
 			}
-		}(&wg, peerId, peer)
+		}(peerId, peer)
 	}
-	wg.Wait()
 }
 
 func (r *Raft) handleAppendEntriesResult(result *appendEntriesResult) {
 	// TODO: (A.15) - if RPC request or response contains term T > currentTerm: set currentTerm = T, convert to follower
 	// Hint: use `toFollower` to convert to follower
-	// Log: r.logger.Info("receive new term on AppendEntries response, fallback to follower", zap.Uint32("peer", result.peerId))
+	r.logger.Info("receive new term on AppendEntries response, fallback to follower", zap.Uint32("peer", result.peerId))
 	if result.Term > r.currentTerm {
 		r.toFollower(result.Term)
 	}

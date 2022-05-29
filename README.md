@@ -30,7 +30,8 @@ Read the following sections to understand how to implement the Raft algorithm wi
 If you encounter any problem, please feel free to contact me.
 
 # Implementation
-
+## Part A
+![test result](./doc/part_A_done.png)
 - [x] Todo A.1
 - [x] Todo A.2
 - [x] Todo A.3
