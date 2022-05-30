@@ -2,6 +2,7 @@ package raft
 
 import (
 	"context"
+	"math"
 	"time"
 
 	"github.com/justin0u0/raft/pb"
@@ -60,18 +61,25 @@ func NewRaft(id uint32, peers map[uint32]Peer, persister Persister, config *Conf
 
 func (r *Raft) applyCommand(req *pb.ApplyCommandRequest) (*pb.ApplyCommandResponse, error) {
 	// TODO: (B.1)* - if not leader, reject client operation and returns `errNotLeader`
-
-	// return &pb.ApplyCommandResponse{Entry: nil}, errNotLeader
+	if r.state != Leader {
+		return &pb.ApplyCommandResponse{Entry: nil}, errNotLeader
+	}
 
 	// TODO: (B.1)* - create a new log entry, append to the local entries
 	// Hint:
 	// - use `getLastLog` to get the last log ID
 	// - use `appendLogs` to append new log
-	// lastLogId, lastLogTerm := r.getLastLog()
-	// r.appendLogs()
+	lastLogId, _ := r.getLastLog()
+	newLogId := lastLogId + 1
+	entry := &pb.Entry{
+		Id:   newLogId,
+		Term: r.currentTerm,
+		Data: req.Data}
+	r.appendLogs([]*pb.Entry{entry})
+	// r.nextIndex
 
 	// TODO: (B.1)* - return the new log entry
-	return nil, nil
+	return &pb.ApplyCommandResponse{Entry: entry}, nil
 }
 
 func (r *Raft) appendEntries(req *pb.AppendEntriesRequest) (*pb.AppendEntriesResponse, error) {
@@ -93,32 +101,40 @@ func (r *Raft) appendEntries(req *pb.AppendEntriesRequest) (*pb.AppendEntriesRes
 	// Log: r.logger.Info("receive request from leader, fallback to follower", zap.Uint64("term", r.currentTerm))
 	// if req.GetLeaderId() != r.
 	// r.
-	// prevLogId := req.GetPrevLogId()
-	// prevLogTerm := req.GetPrevLogTerm()
-	// if prevLogId != 0 && prevLogTerm != 0 {
-	// TODO: (B.2) - reply false if log doesn’t contain an entry at prevLogIndex whose term matches prevLogTerm
-	// Hint: use `getLog` to get log with ID equals to prevLogId
-	// Log: r.logger.Info("the given previous log from leader is missing or mismatched", zap.Uint64("prevLogId", prevLogId), zap.Uint64("prevLogTerm", prevLogTerm), zap.Uint64("logTerm", log.GetTerm()))
-	// if r.getLog(prevLogId) == nil {
-	// 	return &pb.AppendEntriesResponse{Term: r.currentTerm, Success: false}, nil
-	// }
-	// }
+	prevLog := r.getLog(req.PrevLogId)
+	prevLogId := req.GetPrevLogId()
+	prevLogTerm := req.GetPrevLogTerm()
+	if prevLogId != 0 && prevLog == nil {
+		// if prevLog == nil || prevLogTerm != req.PrevLogTerm {
+		// TODO: (B.2) - reply false if log doesn’t contain an entry at prevLogIndex whose term matches prevLogTerm
+		// Hint: use `getLog` to get log with ID equals to prevLogId
+		r.logger.Info("the given previous log from leader is missing or mismatched", zap.Uint64("prevLogId", prevLogId), zap.Uint64("prevLogTerm", prevLogTerm), zap.Uint64("logTerm", prevLog.GetTerm()))
+		return &pb.AppendEntriesResponse{Term: r.currentTerm, Success: false}, nil
+	}
 
-	// if len(req.GetEntries()) != 0 {
-	// TODO: (B.3) - if an existing entry conflicts with a new one (same index but different terms), delete the existing entry and all that follow it
-	// TODO: (B.4) - append any new entries not already in the log
-	// Hint: use `deleteLogs` follows by `appendLogs`
-	// Log: r.logger.Info("receive and append new entries", zap.Int("newEntries", len(req.GetEntries())), zap.Int("numberOfEntries", len(r.logs)))
-	// }
+	if prevLog != nil && prevLog.Id == req.PrevLogId && prevLog.Term != req.PrevLogTerm {
+		// TODO: (B.3) - if an existing entry conflicts with a new one (same index but different terms), delete the existing entry and all that follow it
+		// TODO: (B.4) - append any new entries not already in the log
+		// Hint: use `deleteLogs` follows by `appendLogs`
+		r.logger.Info("delete log from PrevLogId", zap.Int("newEntries", len(req.GetEntries())), zap.Int("numberOfEntries", len(r.logs)))
+		r.deleteLogs(req.PrevLogId)
+	}
 
+	reqEntries := req.GetEntries()
+	if reqEntries != nil {
+		r.logger.Info("receive and append new entries", zap.Int("newEntries", len(req.GetEntries())), zap.Int("numberOfEntries", len(r.logs)))
+		r.appendLogs(reqEntries)
+	}
 	// TODO: (B.5) - if leaderCommit > commitIndex, set commitIndex = min(leaderCommit, index of last new entry)
 	// Hint: use `getLastLog` to get the index of last new entry
 	// Hint: use `applyLogs` to apply(commit) new logs in background
-	// Log: r.logger.Info("update commit index from leader", zap.Uint64("commitIndex", r.commitIndex))
-	// if req.GetLeaderCommitId() > r.commitIndex {
-	// r.commitIndex = uint64(math.Min(float64(req.GetLeaderCommitId()), float64(r.commitIndex)))
-	// r.applyLogs(req.Entries)
-	// }
+	leaderCoomitId := req.GetLeaderCommitId()
+	lastLogId, _ := r.getLastLog()
+	if leaderCoomitId > r.commitIndex {
+		r.logger.Info("update commit index from leader", zap.Uint64("commitIndex", r.commitIndex))
+		r.setCommitIndex(uint64(math.Min(float64(leaderCoomitId), float64(lastLogId))))
+		go r.applyLogs(r.applyCh)
+	}
 
 	return &pb.AppendEntriesResponse{Term: r.currentTerm, Success: true}, nil
 }
@@ -394,20 +410,27 @@ func (r *Raft) broadcastAppendEntries(ctx context.Context, appendEntriesResultCh
 		// Hint: set `req` with the correct fields (entries, prevLogId and prevLogTerm MUST be set)
 		// Hint: use `getLog` to get specific log, `getLogs` to get all logs after and include the specific log Id
 		// Log: r.logger.Debug("send append entries", zap.Uint32("peer", peerId), zap.Any("request", req), zap.Int("entries", len(entries)))
-		// entries := r.getLogs(r.nextIndex[r.id])
-		// matchlog := r.getLog(r.matchIndex[r.id])
+		entries := r.getLogs(r.nextIndex[peerId])
+		prevlog := r.getLog(r.nextIndex[peerId] - 1)
+		prevlogId := uint64(0)
+		prevlogTerm := uint64(0)
+		if prevlog != nil {
+			prevlogId = prevlog.Id
+			prevlogTerm = prevlog.Term
+		}
+
+		r.logger.Info("broadcast append entries", zap.Uint("next index", uint(r.nextIndex[r.id])), zap.Uint("match index", uint(r.matchIndex[r.id])))
+
 		req := &pb.AppendEntriesRequest{
 			Term:           r.currentTerm,
 			LeaderId:       r.id,
-			LeaderCommitId: r.commitIndex}
-		// ,
-		// PrevLogId:      matchlog.Id,
-		// PrevLogTerm:    matchlog.Term,
-		// Entries:        entries}
+			LeaderCommitId: r.commitIndex,
+			PrevLogId:      prevlogId,
+			PrevLogTerm:    prevlogTerm,
+			Entries:        entries}
 
 		// TODO: (A.14) & (B.6)
 		// Hint: modify the code to send `AppendEntries` RPCs in parallel
-		// wg.Add(1)
 		go func(peerId uint32, peer Peer) {
 			resp, err := peer.AppendEntries(ctx, req)
 			if err != nil {
@@ -428,26 +451,36 @@ func (r *Raft) broadcastAppendEntries(ctx context.Context, appendEntriesResultCh
 func (r *Raft) handleAppendEntriesResult(result *appendEntriesResult) {
 	// TODO: (A.15) - if RPC request or response contains term T > currentTerm: set currentTerm = T, convert to follower
 	// Hint: use `toFollower` to convert to follower
-	r.logger.Info("receive new term on AppendEntries response, fallback to follower", zap.Uint32("peer", result.peerId))
+	r.logger.Info("receive new term on AppendEntries response, fallback to follower", zap.Uint32("peer", result.peerId), zap.Bool("Success", result.Success))
 	if result.Term > r.currentTerm {
 		r.toFollower(result.Term)
 	}
 
 	entries := result.req.GetEntries()
 
+	nextIndex := r.nextIndex[result.peerId]
+	matchIndex := r.matchIndex[result.peerId]
+	r.logger.Info("receive new term on AppendEntries response, data", zap.Uint32("entry length", uint32(len(entries))), zap.Uint64("nextindex", uint64(nextIndex)))
+
 	if !result.GetSuccess() {
 		// TODO: (B.7) - if AppendEntries fails because of log inconsistency: decrement nextIndex and retry
 		// Hint: use `setNextAndMatchIndex` to decrement nextIndex
-		// Log: logger.Info("append entries failed, decrease next index", zap.Uint64("nextIndex", nextIndex), zap.Uint64("matchIndex", matchIndex))
+		r.logger.Info("append entries failed, decrease next index", zap.Uint64("nextIndex", nextIndex), zap.Uint64("matchIndex", matchIndex))
+		r.setNextAndMatchIndex(result.peerId, nextIndex-1, matchIndex)
 	} else if len(entries) != 0 {
 		// TODO: (B.8) - if successful: update nextIndex and matchIndex for follower
 		// Hint: use `setNextAndMatchIndex` to update nextIndex and matchIndex
-		// Log: logger.Info("append entries successfully, set next index and match index", zap.Uint32("peer", result.peerId), zap.Uint64("nextIndex", nextIndex), zap.Uint64("matchIndex", matchIndex))
+		r.logger.Info("append entries successfully, set next index and match index", zap.Uint32("peer", result.peerId), zap.Uint64("nextIndex", nextIndex), zap.Uint64("matchIndex", matchIndex))
+		respMatchIndex := entries[len(entries)-1].Id
+		r.setNextAndMatchIndex(result.peerId, respMatchIndex+1, respMatchIndex)
 	}
 
 	replicasNeeded := (len(r.peers)+1)/2 + 1
 
 	logs := r.getLogs(r.commitIndex + 1)
+	if len(logs) == 0 {
+		return
+	}
 	for i := len(logs) - 1; i >= 0; i-- {
 		// TODO: (B.9) if there exiss an N such that N > commitIndex, a majority of matchIndex[i] >= N, and log[N].term == currentTerm: set commitIndex = N
 		// Hint: find if such N exists
@@ -455,8 +488,24 @@ func (r *Raft) handleAppendEntriesResult(result *appendEntriesResult) {
 		// Hint: if such N exists, use `applyLogs` to apply logs
 
 		replicas := 1
+		n := uint64(r.commitIndex) + uint64(i+1)
+		log := r.getLog(n)
+		if n == logs[i].Id {
+			r.logger.Info("same id")
+		}
+		for peerId := range r.peers {
+			if log != nil {
+				if r.matchIndex[peerId] >= n && log.Term == r.currentTerm {
+					replicas++
+				}
+			}
+		}
 
 		if replicas >= replicasNeeded {
+			r.logger.Info("apply llog~")
+			r.setCommitIndex(r.commitIndex + 1)
+			go r.applyLogs(r.applyCh)
+			return
 		}
 	}
 }

@@ -99,8 +99,8 @@ func TestSingleLogReplication(t *testing.T) {
 	leaderId, leaderTerm := c.checkSingleLeader()
 
 	data := []byte("command 1")
-	c.applyCommand(leaderId, leaderTerm, data)
-
+	id := c.applyCommand(leaderId, leaderTerm, data)
+	t.Log("getlogid : ", id, leaderId)
 	time.Sleep(500 * time.Millisecond)
 
 	for id := 1; id <= numNodes; id++ {
