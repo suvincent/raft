@@ -47,15 +47,17 @@ If you encounter any problem, please feel free to contact me.
 - [x] Todo A.13
 - [x] Todo A.14
 - [x] Todo A.15
-- [ ] Todo B.1
-- [ ] Todo B.2
-- [ ] Todo B.3
-- [ ] Todo B.4
-- [ ] Todo B.5
-- [ ] Todo B.6
-- [ ] Todo B.7
-- [ ] Todo B.8
-- [ ] Todo B.9
+## Part B
+![test result](./doc/part_b_pass9.png)
+- [x] Todo B.1
+- [x] Todo B.2
+- [x] Todo B.3
+- [x] Todo B.4
+- [x] Todo B.5
+- [x] Todo B.6
+- [x] Todo B.7
+- [x] Todo B.8
+- [x] Todo B.9
 
 ## Description
 

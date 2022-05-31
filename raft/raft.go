@@ -503,7 +503,7 @@ func (r *Raft) handleAppendEntriesResult(result *appendEntriesResult) {
 
 		if replicas >= replicasNeeded {
 			r.logger.Info("apply llog~")
-			r.setCommitIndex(r.commitIndex + 1)
+			r.setCommitIndex(n)
 			go r.applyLogs(r.applyCh)
 			return
 		}
