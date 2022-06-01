@@ -85,7 +85,7 @@ func (r *Raft) applyCommand(req *pb.ApplyCommandRequest) (*pb.ApplyCommandRespon
 func (r *Raft) appendEntries(req *pb.AppendEntriesRequest) (*pb.AppendEntriesResponse, error) {
 	// TODO: (A.1) - reply false if term < currentTerm
 	if req.GetTerm() < r.currentTerm {
-		r.logger.Info("reject append entries since current term is older")
+		// r.logger.Info("reject append entries since current term is older")
 		return &pb.AppendEntriesResponse{Term: r.currentTerm, Success: false}, nil
 	}
 	// TODO: (A.2)* - reset the `lastHeartbeat`
@@ -93,22 +93,22 @@ func (r *Raft) appendEntries(req *pb.AppendEntriesRequest) (*pb.AppendEntriesRes
 	r.lastHeartbeat = time.Now()
 	// TODO: (A.3) - if RPC request or response contains term T > currentTerm: set currentTerm = T, convert to follower
 	// Hint: use `toFollower` to convert to follower
-	r.logger.Info("increase term since receive a newer one", zap.Uint64("term", r.currentTerm))
+	// r.logger.Info("increase term since receive a newer one", zap.Uint64("term", r.currentTerm))
 	if req.GetTerm() > r.currentTerm {
 		r.toFollower(req.GetTerm())
 	}
 	// TODO: (A.4) - if AppendEntries RPC received from new leader: convert to follower
-	// Log: r.logger.Info("receive request from leader, fallback to follower", zap.Uint64("term", r.currentTerm))
+	// Log: // r.logger.Info("receive request from leader, fallback to follower", zap.Uint64("term", r.currentTerm))
 	// if req.GetLeaderId() != r.
 	// r.
 	prevLog := r.getLog(req.PrevLogId)
 	prevLogId := req.GetPrevLogId()
-	prevLogTerm := req.GetPrevLogTerm()
+	// prevLogTerm := req.GetPrevLogTerm()
 	if prevLogId != 0 && prevLog == nil {
 		// if prevLog == nil || prevLogTerm != req.PrevLogTerm {
 		// TODO: (B.2) - reply false if log doesn’t contain an entry at prevLogIndex whose term matches prevLogTerm
 		// Hint: use `getLog` to get log with ID equals to prevLogId
-		r.logger.Info("the given previous log from leader is missing or mismatched", zap.Uint64("prevLogId", prevLogId), zap.Uint64("prevLogTerm", prevLogTerm), zap.Uint64("logTerm", prevLog.GetTerm()))
+		// r.logger.Info("the given previous log from leader is missing or mismatched", zap.Uint64("prevLogId", prevLogId), zap.Uint64("prevLogTerm", prevLogTerm), zap.Uint64("logTerm", prevLog.GetTerm()))
 		return &pb.AppendEntriesResponse{Term: r.currentTerm, Success: false}, nil
 	}
 
@@ -116,13 +116,13 @@ func (r *Raft) appendEntries(req *pb.AppendEntriesRequest) (*pb.AppendEntriesRes
 		// TODO: (B.3) - if an existing entry conflicts with a new one (same index but different terms), delete the existing entry and all that follow it
 		// TODO: (B.4) - append any new entries not already in the log
 		// Hint: use `deleteLogs` follows by `appendLogs`
-		r.logger.Info("delete log from PrevLogId", zap.Int("newEntries", len(req.GetEntries())), zap.Int("numberOfEntries", len(r.logs)))
+		// r.logger.Info("delete log from PrevLogId", zap.Int("newEntries", len(req.GetEntries())), zap.Int("numberOfEntries", len(r.logs)))
 		r.deleteLogs(req.PrevLogId)
 	}
 
 	reqEntries := req.GetEntries()
 	if reqEntries != nil {
-		r.logger.Info("receive and append new entries", zap.Int("newEntries", len(req.GetEntries())), zap.Int("numberOfEntries", len(r.logs)))
+		// r.logger.Info("receive and append new entries", zap.Int("newEntries", len(req.GetEntries())), zap.Int("numberOfEntries", len(r.logs)))
 		r.appendLogs(reqEntries)
 	}
 	// TODO: (B.5) - if leaderCommit > commitIndex, set commitIndex = min(leaderCommit, index of last new entry)
@@ -131,7 +131,7 @@ func (r *Raft) appendEntries(req *pb.AppendEntriesRequest) (*pb.AppendEntriesRes
 	leaderCoomitId := req.GetLeaderCommitId()
 	lastLogId, _ := r.getLastLog()
 	if leaderCoomitId > r.commitIndex {
-		r.logger.Info("update commit index from leader", zap.Uint64("commitIndex", r.commitIndex))
+		// r.logger.Info("update commit index from leader", zap.Uint64("commitIndex", r.commitIndex))
 		r.setCommitIndex(uint64(math.Min(float64(leaderCoomitId), float64(lastLogId))))
 		go r.applyLogs(r.applyCh)
 	}
@@ -141,13 +141,13 @@ func (r *Raft) appendEntries(req *pb.AppendEntriesRequest) (*pb.AppendEntriesRes
 
 func (r *Raft) requestVote(req *pb.RequestVoteRequest) (*pb.RequestVoteResponse, error) {
 	// TODO: (A.5) - reply false if term < currentTerm
-	r.logger.Info("reject request vote since current term is older")
+	// r.logger.Info("reject request vote since current term is older")
 	if req.GetTerm() < r.currentTerm {
 		return &pb.RequestVoteResponse{Term: r.currentTerm, VoteGranted: false}, nil
 	}
 	// TODO: (A.6) - if RPC request or response contains term T > currentTerm: set currentTerm = T, convert to follower
 	// Hint: use `toFollower` to convert to follower
-	r.logger.Info("increase term since receive a newer one", zap.Uint64("term", r.currentTerm))
+	// r.logger.Info("increase term since receive a newer one", zap.Uint64("term", r.currentTerm))
 	if req.GetTerm() > r.currentTerm {
 		r.toFollower(req.GetTerm())
 		r.voteFor(0, false)
@@ -158,9 +158,9 @@ func (r *Raft) requestVote(req *pb.RequestVoteRequest) (*pb.RequestVoteResponse,
 		// TODO: (A.7) - if votedFor is null or candidateId, and candidate’s log is at least as up-to-date as receiver’s log, grant vote
 		// Hint: (fix the condition) if already vote for another candidate, reply false
 
-		r.logger.Info("reject since already vote for another candidate",
-			zap.Uint64("term", r.currentTerm),
-			zap.Uint32("votedFor", r.votedFor))
+		// r.logger.Info("reject since already vote for another candidate",
+		// zap.Uint64("term", r.currentTerm),
+		// zap.Uint32("votedFor", r.votedFor))
 
 		return &pb.RequestVoteResponse{Term: r.currentTerm, VoteGranted: false}, nil
 	}
@@ -170,7 +170,7 @@ func (r *Raft) requestVote(req *pb.RequestVoteRequest) (*pb.RequestVoteResponse,
 		// TODO: (A.7) - if votedFor is null or candidateId, and candidate’s log is at least as up-to-date as receiver’s log, grant vote
 		// Hint: (fix the condition) if the local last entry is more up-to-date than the candidate's last entry, reply false
 		// Hint: use `getLastLog` to get the last log entry
-		r.logger.Info("reject since last entry is more up-to-date")
+		// r.logger.Info("reject since last entry is more up-to-date")
 
 		return &pb.RequestVoteResponse{Term: r.currentTerm, VoteGranted: false}, nil
 	}
@@ -178,7 +178,7 @@ func (r *Raft) requestVote(req *pb.RequestVoteRequest) (*pb.RequestVoteResponse,
 	// TODO: (A.7) - if votedFor is null or candidateId, and candidate’s log is at least as up-to-date as receiver’s log, grant vote
 	// Hint: now vote should be granted, use `voteFor` to set votedFor
 	r.voteFor(req.GetCandidateId(), false)
-	r.logger.Info("vote for another candidate", zap.Uint32("votedFor", r.votedFor))
+	// r.logger.Info("vote for another candidate", zap.Uint32("votedFor", r.votedFor))
 
 	// TODO: (A.8)* - reset the `lastHeartbeat`
 	// Description: start from the current line, the current request is a valid RPC
@@ -195,15 +195,15 @@ func (r *Raft) Run(ctx context.Context) {
 		return
 	}
 
-	r.logger.Info("starting raft",
-		zap.Uint64("term", r.currentTerm),
-		zap.Uint32("votedFor", r.votedFor),
-		zap.Int("logs", len(r.logs)))
+	// r.logger.Info("starting raft",
+	// zap.Uint64("term", r.currentTerm),
+	// zap.Uint32("votedFor", r.votedFor),
+	// zap.Int("logs", len(r.logs)))
 
 	for {
 		select {
 		case <-ctx.Done():
-			r.logger.Info("raft server stopped gracefully")
+			// r.logger.Info("raft server stopped gracefully")
 			return
 		default:
 		}
@@ -226,7 +226,7 @@ func (r *Raft) ApplyCh() <-chan *pb.Entry {
 // follower related
 
 func (r *Raft) runFollower(ctx context.Context) {
-	r.logger.Info("running follower")
+	// r.logger.Info("running follower")
 
 	timeoutCh := randomTimeout(r.config.HeartbeatTimeout)
 
@@ -253,7 +253,7 @@ func (r *Raft) handleFollowerHeartbeatTimeout() {
 	// Hint: use `toCandidate` to convert to candidate
 	r.toCandidate()
 
-	r.logger.Info("heartbeat timeout, change state from follower to candidate")
+	// r.logger.Info("heartbeat timeout, change state from follower to candidate")
 }
 
 // candidate related
@@ -264,7 +264,7 @@ type voteResult struct {
 }
 
 func (r *Raft) runCandidate(ctx context.Context) {
-	r.logger.Info("running candidate")
+	// r.logger.Info("running candidate")
 
 	grantedVotes := 0
 	votesNeeded := (len(r.peers)+1)/2 + 1
@@ -292,7 +292,7 @@ func (r *Raft) runCandidate(ctx context.Context) {
 			r.handleVoteResult(vote, &grantedVotes, votesNeeded)
 
 		case <-timeoutCh:
-			r.logger.Info("election timeout reached, restarting election")
+			// r.logger.Info("election timeout reached, restarting election")
 			return
 
 		case rpc := <-r.rpcCh:
@@ -307,11 +307,11 @@ func (r *Raft) voteForSelf(grantedVotes *int) {
 	// Hint: use `voteFor` to vote for self
 	r.voteFor(r.id, true)
 	(*grantedVotes)++
-	r.logger.Info("vote for self", zap.Uint64("term", r.currentTerm))
+	// r.logger.Info("vote for self", zap.Uint64("term", r.currentTerm))
 }
 
 func (r *Raft) broadcastRequestVote(ctx context.Context, voteCh chan *voteResult) {
-	r.logger.Info("broadcast request vote", zap.Uint64("term", r.currentTerm))
+	// r.logger.Info("broadcast request vote", zap.Uint64("term", r.currentTerm))
 
 	lastLogId, lastLogTerm := r.getLastLog()
 	req := &pb.RequestVoteRequest{
@@ -331,7 +331,7 @@ func (r *Raft) broadcastRequestVote(ctx context.Context, voteCh chan *voteResult
 				r.logger.Error("fail to send RequestVote RPC", zap.Error(err), zap.Uint32("peer", peerId))
 				return
 			}
-			r.logger.Info("peer vote result:", zap.Uint32("voter", peerId), zap.Bool("Granted?", resp.VoteGranted))
+			// r.logger.Info("peer vote result:", zap.Uint32("voter", peerId), zap.Bool("Granted?", resp.VoteGranted))
 			voteCh <- &voteResult{RequestVoteResponse: resp, peerId: peerId}
 		}(peerId, peer)
 	}
@@ -340,12 +340,12 @@ func (r *Raft) broadcastRequestVote(ctx context.Context, voteCh chan *voteResult
 func (r *Raft) handleVoteResult(vote *voteResult, grantedVotes *int, votesNeeded int) {
 	// TODO: (A.12) - if RPC request or response contains term T > currentTerm: set currentTerm = T, convert to follower
 	// Hint: use `toFollower` to convert to follower
-	r.logger.Info("receive new term on RequestVote response, fallback to follower", zap.Uint32("peer", vote.peerId))
+	// r.logger.Info("receive new term on RequestVote response, fallback to follower", zap.Uint32("peer", vote.peerId))
 	if vote.Term > r.currentTerm {
 		r.toFollower(vote.Term)
 	}
 
-	r.logger.Info("vote granted", zap.Uint32("peer", vote.peerId), zap.Int("grantedVote", (*grantedVotes)))
+	// r.logger.Info("vote granted", zap.Uint32("peer", vote.peerId), zap.Int("grantedVote", (*grantedVotes)))
 	if vote.VoteGranted {
 		(*grantedVotes)++
 	}
@@ -398,7 +398,7 @@ func (r *Raft) runLeader(ctx context.Context) {
 }
 
 func (r *Raft) broadcastAppendEntries(ctx context.Context, appendEntriesResultCh chan *appendEntriesResult) {
-	r.logger.Info("broadcast append entries")
+	// r.logger.Info("broadcast append entries")
 
 	for peerId, peer := range r.peers {
 		peerId := peerId
@@ -419,7 +419,7 @@ func (r *Raft) broadcastAppendEntries(ctx context.Context, appendEntriesResultCh
 			prevlogTerm = prevlog.Term
 		}
 
-		r.logger.Info("broadcast append entries", zap.Uint("next index", uint(r.nextIndex[r.id])), zap.Uint("match index", uint(r.matchIndex[r.id])))
+		// r.logger.Info("broadcast append entries", zap.Uint("next index", uint(r.nextIndex[r.id])), zap.Uint("match index", uint(r.matchIndex[r.id])))
 
 		req := &pb.AppendEntriesRequest{
 			Term:           r.currentTerm,
@@ -451,7 +451,7 @@ func (r *Raft) broadcastAppendEntries(ctx context.Context, appendEntriesResultCh
 func (r *Raft) handleAppendEntriesResult(result *appendEntriesResult) {
 	// TODO: (A.15) - if RPC request or response contains term T > currentTerm: set currentTerm = T, convert to follower
 	// Hint: use `toFollower` to convert to follower
-	r.logger.Info("receive new term on AppendEntries response, fallback to follower", zap.Uint32("peer", result.peerId), zap.Bool("Success", result.Success))
+	// r.logger.Info("receive new term on AppendEntries response, fallback to follower", zap.Uint32("peer", result.peerId), zap.Bool("Success", result.Success))
 	if result.Term > r.currentTerm {
 		r.toFollower(result.Term)
 	}
@@ -460,17 +460,17 @@ func (r *Raft) handleAppendEntriesResult(result *appendEntriesResult) {
 
 	nextIndex := r.nextIndex[result.peerId]
 	matchIndex := r.matchIndex[result.peerId]
-	r.logger.Info("receive new term on AppendEntries response, data", zap.Uint32("entry length", uint32(len(entries))), zap.Uint64("nextindex", uint64(nextIndex)))
+	// r.logger.Info("receive new term on AppendEntries response, data", zap.Uint32("entry length", uint32(len(entries))), zap.Uint64("nextindex", uint64(nextIndex)))
 
 	if !result.GetSuccess() {
 		// TODO: (B.7) - if AppendEntries fails because of log inconsistency: decrement nextIndex and retry
 		// Hint: use `setNextAndMatchIndex` to decrement nextIndex
-		r.logger.Info("append entries failed, decrease next index", zap.Uint64("nextIndex", nextIndex), zap.Uint64("matchIndex", matchIndex))
+		// r.logger.Info("append entries failed, decrease next index", zap.Uint64("nextIndex", nextIndex), zap.Uint64("matchIndex", matchIndex))
 		r.setNextAndMatchIndex(result.peerId, nextIndex-1, matchIndex)
 	} else if len(entries) != 0 {
 		// TODO: (B.8) - if successful: update nextIndex and matchIndex for follower
 		// Hint: use `setNextAndMatchIndex` to update nextIndex and matchIndex
-		r.logger.Info("append entries successfully, set next index and match index", zap.Uint32("peer", result.peerId), zap.Uint64("nextIndex", nextIndex), zap.Uint64("matchIndex", matchIndex))
+		// r.logger.Info("append entries successfully, set next index and match index", zap.Uint32("peer", result.peerId), zap.Uint64("nextIndex", nextIndex), zap.Uint64("matchIndex", matchIndex))
 		respMatchIndex := entries[len(entries)-1].Id
 		r.setNextAndMatchIndex(result.peerId, respMatchIndex+1, respMatchIndex)
 	}
@@ -490,9 +490,9 @@ func (r *Raft) handleAppendEntriesResult(result *appendEntriesResult) {
 		replicas := 1
 		n := uint64(r.commitIndex) + uint64(i+1)
 		log := r.getLog(n)
-		if n == logs[i].Id {
-			r.logger.Info("same id")
-		}
+		// if n == logs[i].Id {
+		// r.logger.Info("same id")
+		// }
 		for peerId := range r.peers {
 			if log != nil {
 				if r.matchIndex[peerId] >= n && log.Term == r.currentTerm {
@@ -502,7 +502,7 @@ func (r *Raft) handleAppendEntriesResult(result *appendEntriesResult) {
 		}
 
 		if replicas >= replicasNeeded {
-			r.logger.Info("apply llog~")
+			// r.logger.Info("apply llog~")
 			r.setCommitIndex(n)
 			go r.applyLogs(r.applyCh)
 			return
