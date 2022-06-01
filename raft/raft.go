@@ -99,30 +99,35 @@ func (r *Raft) appendEntries(req *pb.AppendEntriesRequest) (*pb.AppendEntriesRes
 	}
 	// TODO: (A.4) - if AppendEntries RPC received from new leader: convert to follower
 	// Log: // r.logger.Info("receive request from leader, fallback to follower", zap.Uint64("term", r.currentTerm))
+	if req.GetTerm() == r.currentTerm && r.state != Follower {
+		r.toFollower(req.GetTerm())
+		// r.logger.Info("receive request from leader, fallback to follower", zap.Uint64("term", r.currentTerm))
+	}
 	// if req.GetLeaderId() != r.
 	// r.
 	prevLog := r.getLog(req.PrevLogId)
 	prevLogId := req.GetPrevLogId()
 	// prevLogTerm := req.GetPrevLogTerm()
 	if prevLogId != 0 && prevLog == nil {
-		// if prevLog == nil || prevLogTerm != req.PrevLogTerm {
+		return &pb.AppendEntriesResponse{Term: r.currentTerm, Success: false}, nil
+	}
+
+	if prevLog != nil && prevLog.Id == req.PrevLogId && prevLog.Term != req.PrevLogTerm {
 		// TODO: (B.2) - reply false if log doesn’t contain an entry at prevLogIndex whose term matches prevLogTerm
 		// Hint: use `getLog` to get log with ID equals to prevLogId
 		// r.logger.Info("the given previous log from leader is missing or mismatched", zap.Uint64("prevLogId", prevLogId), zap.Uint64("prevLogTerm", prevLogTerm), zap.Uint64("logTerm", prevLog.GetTerm()))
 		return &pb.AppendEntriesResponse{Term: r.currentTerm, Success: false}, nil
 	}
 
-	if prevLog != nil && prevLog.Id == req.PrevLogId && prevLog.Term != req.PrevLogTerm {
+	reqEntries := req.GetEntries()
+	if reqEntries != nil {
 		// TODO: (B.3) - if an existing entry conflicts with a new one (same index but different terms), delete the existing entry and all that follow it
 		// TODO: (B.4) - append any new entries not already in the log
 		// Hint: use `deleteLogs` follows by `appendLogs`
 		// r.logger.Info("delete log from PrevLogId", zap.Int("newEntries", len(req.GetEntries())), zap.Int("numberOfEntries", len(r.logs)))
-		r.deleteLogs(req.PrevLogId)
-	}
-
-	reqEntries := req.GetEntries()
-	if reqEntries != nil {
+		// r.deleteLogs(req.PrevLogId)
 		// r.logger.Info("receive and append new entries", zap.Int("newEntries", len(req.GetEntries())), zap.Int("numberOfEntries", len(r.logs)))
+		r.deleteLogs(req.PrevLogId)
 		r.appendLogs(reqEntries)
 	}
 	// TODO: (B.5) - if leaderCommit > commitIndex, set commitIndex = min(leaderCommit, index of last new entry)
@@ -153,7 +158,7 @@ func (r *Raft) requestVote(req *pb.RequestVoteRequest) (*pb.RequestVoteResponse,
 		r.voteFor(0, false)
 	}
 
-	if r.votedFor != 0 {
+	if r.votedFor != 0 && r.votedFor != req.GetCandidateId() {
 		// if (r.votedFor != 0) || (r.votedFor = req.GetCandidateId()) {
 		// TODO: (A.7) - if votedFor is null or candidateId, and candidate’s log is at least as up-to-date as receiver’s log, grant vote
 		// Hint: (fix the condition) if already vote for another candidate, reply false

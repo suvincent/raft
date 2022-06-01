@@ -356,6 +356,7 @@ func TestCannotCommitLogIfTermMismatch(t *testing.T) {
 
 	time.Sleep(1 * time.Second)
 	oldLeaderId, oldLeaderTerm := c.checkSingleLeader()
+	t.Log("oldLeaderId", oldLeaderId)
 
 	// log 1 are replicated on all followers
 	data1 := []byte("command 1")
@@ -366,9 +367,10 @@ func TestCannotCommitLogIfTermMismatch(t *testing.T) {
 	c.disconnectAll(oldLeaderId)
 	data2 := []byte("command 2")
 	log2Id := c.applyCommand(oldLeaderId, oldLeaderTerm, data2)
-
 	time.Sleep(1 * time.Second)
+	t.Log("checkSingleLeader 1", time.Now())
 	newLeaderId, newLeaderTerm := c.checkSingleLeader()
+	t.Log("newLeaderId", newLeaderId)
 	if newLeaderId == oldLeaderId {
 		t.Fatalf("invalid leader, node %d already stop", oldLeaderId)
 	}
@@ -379,6 +381,7 @@ func TestCannotCommitLogIfTermMismatch(t *testing.T) {
 	// old leader is back from the network partition
 	c.connectAll(oldLeaderId)
 	time.Sleep(1 * time.Second)
+	t.Log("checkSingleLeader 2", time.Now())
 	leaderId, leaderTerm := c.checkSingleLeader()
 	if newLeaderId != leaderId || newLeaderTerm != leaderTerm {
 		t.Fatal("new leader should not be affected when the old leader com")
@@ -392,8 +395,9 @@ func TestCannotCommitLogIfTermMismatch(t *testing.T) {
 			c.disconnectAll(id)
 		}
 	}
-
+	t.Log("disconnectAll except id=", oldLeaderId, time.Now())
 	time.Sleep(1 * time.Second)
+	t.Log("checkSingleLeader 3", time.Now())
 	leaderId, leaderTerm = c.checkSingleLeader()
 	if leaderId != oldLeaderId {
 		t.Fatal("leader should go back to the old leader after our manually operation")
@@ -401,6 +405,7 @@ func TestCannotCommitLogIfTermMismatch(t *testing.T) {
 	if leaderTerm <= newLeaderTerm {
 		t.Fatalf("the old leader should have term %d greater than the old term", newLeaderTerm)
 	}
+	t.Log("checkSingleLeader done", time.Now())
 
 	// resume all connections
 	for i := 1; i <= numNodes; i++ {
